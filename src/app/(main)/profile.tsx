@@ -7,8 +7,8 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { Screen } from '@/components/ui/Screen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
 import { colors, radius } from '@/constants/theme';
 import { getErrorMessage } from '@/lib/errors';
@@ -17,6 +17,8 @@ import { profileSchema, type ProfileValues } from '@/lib/validation';
 import { updateProfile } from '@/services/api/profile';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDemoStore } from '@/stores/demo-store';
+import { useLiveStore } from '@/stores/live-store';
+import { usePreferencesStore } from '@/stores/preferences-store';
 import { queryClient } from '@/lib/query-client';
 
 export default function ProfileScreen() {
@@ -25,6 +27,9 @@ export default function ProfileScreen() {
   const isDemo = useAuthStore((state) => state.isDemo);
   const logout = useAuthStore((state) => state.logout);
   const resetDemo = useDemoStore((state) => state.reset);
+  const connection = useLiveStore((state) => state.connection);
+  const cabin = useLiveStore((state) => state.cabin);
+  const privacy = usePreferencesStore((state) => state.privacy);
   const [message, setMessage] = useState<string | null>(null);
   const { control, handleSubmit, formState } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -40,7 +45,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <DemoBanner />
+      <ScreenHeader title="Profile" detail="Account, notifications, privacy, and the health of the link to the vehicle." />
       <View style={styles.hero}>
         <View style={styles.avatar}>
           <AppText variant="title" tone="lime">
@@ -87,6 +92,20 @@ export default function ProfileScreen() {
             void handleSubmit((values) => save.mutate({ name: values.name, phone: values.phone || undefined }))();
           }}
         />
+      </Card>
+      <Card>
+        <AppText variant="label" tone="muted">
+          DEVICE HEALTH
+        </AppText>
+        <AppText tone="muted">Link {isDemo ? 'demo' : connection}. Location sharing {privacy.foregroundSharing ? 'on' : 'off'}.</AppText>
+        <AppText tone="muted">
+          {cabin?.deviceStatus
+            ? cabin.deviceStatus
+            : cabin
+              ? `Cabin report ${cabin.simulated ? 'is simulated' : 'was received'}.`
+              : 'No vehicle status has been reported.'}
+        </AppText>
+        <Button label="Open cabin monitor" variant="secondary" onPress={() => router.push('/cabin')} />
       </Card>
       <Button label="Notification preferences" variant="secondary" onPress={() => router.push('/notifications')} />
       <Button label="Privacy and location" variant="secondary" onPress={() => router.push('/privacy')} />

@@ -3,6 +3,7 @@ import type { CabinCapture, CabinMonitor, ConnectionState, GuardianNotice, LiveF
 
 type LiveState = {
   fix: LiveFix | null;
+  fixes: Record<string, LiveFix>;
   status: LiveStatus | null;
   events: SafetyAlert[];
   cabin: CabinMonitor | null;
@@ -22,15 +23,20 @@ type LiveState = {
 
 export const useLiveStore = create<LiveState>((set) => ({
   fix: null,
+  fixes: {},
   status: null,
   events: [],
   cabin: null,
   captures: [],
   guardianNotice: null,
   connection: 'idle',
-  applyFix: (fix) => set({ fix }),
+  applyFix: (fix) => set((state) => ({ fix, fixes: { ...state.fixes, [fix.tripId]: fix } })),
   applyStatus: (status) => set({ status }),
-  pushEvent: (event) => set((state) => ({ events: [event, ...state.events].slice(0, 8) })),
+  pushEvent: (event) =>
+    set((state) => {
+      const without = state.events.filter((item) => item.id !== event.id);
+      return { events: [event, ...without].slice(0, 40) };
+    }),
   applyCabin: (cabin) =>
     set((state) => ({
       cabin: {
@@ -45,5 +51,15 @@ export const useLiveStore = create<LiveState>((set) => ({
     })),
   publishGuardian: (notice) => set({ guardianNotice: notice }),
   setConnection: (connection) => set({ connection }),
-  reset: () => set({ fix: null, status: null, events: [], cabin: null, captures: [], guardianNotice: null, connection: 'idle' }),
+  reset: () =>
+    set({
+      fix: null,
+      fixes: {},
+      status: null,
+      events: [],
+      cabin: null,
+      captures: [],
+      guardianNotice: null,
+      connection: 'idle',
+    }),
 }));

@@ -4,8 +4,9 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LiveMap } from '@/components/map/LiveMap';
+import { ProvenanceChip } from '@/components/ui/ProvenanceChip';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { CabinCameras } from '@/components/cabin/CabinCameras';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
@@ -13,6 +14,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { RouteProgress } from '@/components/trip/RouteProgress';
 import { getErrorMessage } from '@/lib/errors';
 import { formatClock, formatEta, formatRelative, formatSpeed } from '@/lib/format';
+import { locationProvenance, routeRecordLabel } from '@/lib/provenance';
 import { canShowLocation, presentTrip } from '@/lib/present-trip';
 import { getTrip } from '@/services/api/trips';
 import { useAuthStore } from '@/stores/auth-store';
@@ -25,7 +27,9 @@ export default function TripScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const isDemo = useAuthStore((state) => state.isDemo);
   const demoHydrated = useDemoStore((state) => state.hydrated);
-  const fix = useLiveStore((state) => state.fix);
+  const fixes = useLiveStore((state) => state.fixes);
+  const latestFix = useLiveStore((state) => state.fix);
+  const connection = useLiveStore((state) => state.connection);
   const liveStatus = useLiveStore((state) => state.status);
   const cabin = useLiveStore((state) => state.cabin);
   const tripQuery = useQuery({
@@ -33,12 +37,17 @@ export default function TripScreen() {
     queryFn: () => getTrip(id ?? ''),
     enabled: Boolean(id) && (!isDemo || demoHydrated),
   });
-  const trip = tripQuery.data ? presentTrip(tripQuery.data, fix, liveStatus) : null;
+  const matchedFix = tripQuery.data
+    ? (fixes[tripQuery.data.id] ?? (latestFix?.tripId === tripQuery.data.id ? latestFix : null))
+    : null;
+  const trip = tripQuery.data
+    ? presentTrip(tripQuery.data, matchedFix, liveStatus?.tripId === tripQuery.data.id ? liveStatus : null)
+    : null;
   const visible = trip ? canShowLocation(trip) : false;
 
   return (
     <Screen withHeader>
-      <DemoBanner />
+      <ScreenHeader title="Trip" />
       {tripQuery.isLoading ? <LoadingState label="Opening the trip" /> : null}
       {tripQuery.isError ? <ErrorState message={getErrorMessage(tripQuery.error)} onRetry={() => void tripQuery.refetch()} /> : null}
       {trip ? (
@@ -63,6 +72,20 @@ export default function TripScreen() {
           <AppText tone="muted">
             {trip.origin} → {trip.destination}
           </AppText>
+          <View style={styles.row}>
+            <ProvenanceChip
+              provenance={locationProvenance({
+                simulated: trip.simulated,
+                source: matchedFix?.source,
+                updatedAt: trip.updatedAt,
+                connection: isDemo ? 'demo' : connection,
+                sharing: visible,
+              })}
+            />
+            <AppText variant="caption" tone="dim">
+              {routeRecordLabel({ simulated: trip.simulated, pointCount: visible ? trip.route.length : 0 })}
+            </AppText>
+          </View>
           <RouteProgress progress={trip.progress} />
           {visible ? (
             <View style={styles.metrics}>

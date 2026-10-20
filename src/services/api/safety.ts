@@ -72,6 +72,32 @@ export async function getIncident(id: string): Promise<Incident> {
   }
 }
 
+export async function acknowledgeAlert(id: string): Promise<void> {
+  if (useAuthStore.getState().isDemo) {
+    useDemoStore.getState().acknowledgeAlert(id);
+    return;
+  }
+  try {
+    await api.post(`/safety/alerts/${id}/acknowledge`);
+  } catch (error) {
+    throw toApiError(error);
+  }
+}
+
+export async function acknowledgeIncident(id: string): Promise<void> {
+  if (useAuthStore.getState().isDemo) {
+    useDemoStore.getState().acknowledgeIncident(id);
+    const linked = useDemoStore.getState().alerts.find((alert) => alert.incidentId === id);
+    if (linked) useDemoStore.getState().acknowledgeAlert(linked.id);
+    return;
+  }
+  try {
+    await api.post(`/safety/incidents/${id}/acknowledge`);
+  } catch (error) {
+    throw toApiError(error);
+  }
+}
+
 export async function sendSos(tripId: string): Promise<Incident> {
   if (useAuthStore.getState().isDemo) {
     const { point } = pointAlong(activeRoute, 0.5);

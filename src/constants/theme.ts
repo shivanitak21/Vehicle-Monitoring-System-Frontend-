@@ -10,6 +10,7 @@ export const colors = {
   textDim: '#66758C',
   lime: '#D6FF4A',
   limeDeep: '#B6DF22',
+  green: '#3DDC97',
   teal: '#3EE0C5',
   amber: '#FFB020',
   coral: '#FF5D73',

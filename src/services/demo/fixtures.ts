@@ -252,26 +252,6 @@ export function createIncidents(): Incident[] {
 export function createAlerts(): SafetyAlert[] {
   return [
     {
-      id: 'alert-fatigue',
-      tripId: ACTIVE_TRIP_ID,
-      kind: 'fatigue',
-      severity: 'info',
-      title: 'Calm cabin',
-      message: 'Simulated fatigue signal is low on Aria’s current sample trip.',
-      createdAt: hoursAgo(0.2),
-      simulated: true,
-    },
-    {
-      id: 'alert-glance',
-      tripId: ACTIVE_TRIP_ID,
-      kind: 'distraction',
-      severity: 'info',
-      title: 'No distraction pattern',
-      message: 'Simulated glance detection has not crossed the watch threshold.',
-      createdAt: hoursAgo(0.15),
-      simulated: true,
-    },
-    {
       id: 'alert-speed',
       tripId: 'trip-clinic',
       incidentId: 'incident-speed',
@@ -281,6 +261,9 @@ export function createAlerts(): SafetyAlert[] {
       message: 'Simulated speed stayed above the sample limit for 40 seconds. Open the incident for the labeled evidence.',
       createdAt: hoursAgo(49.7),
       simulated: true,
+      source: 'Demo simulator',
+      passengerName: 'Aria Shah',
+      vehicleLabel: 'Family sedan',
     },
   ];
 }

@@ -17,20 +17,26 @@ function withConsent(trip: Trip): Trip {
   };
 }
 
-export async function getActiveTrip(): Promise<Trip | null> {
+export async function getActiveTrips(): Promise<Trip[]> {
   if (useAuthStore.getState().isDemo) {
-    const trip = withConsent(createActiveTrip());
     const passenger = useDemoStore.getState().members.find((member) => member.id === ARIA_ID);
-    if (!passenger) return null;
-    return trip;
+    if (!passenger) return [];
+    return [withConsent(createActiveTrip())];
   }
   try {
-    const response = await api.get<Trip | null>('/trips/active');
-    return response.data || null;
+    const response = await api.get<Trip | Trip[] | null>('/trips/active');
+    const data = response.data;
+    if (!data) return [];
+    return Array.isArray(data) ? data : [data];
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+    if (axios.isAxiosError(error) && error.response?.status === 404) return [];
     throw toApiError(error);
   }
+}
+
+export async function getActiveTrip(): Promise<Trip | null> {
+  const trips = await getActiveTrips();
+  return trips[0] ?? null;
 }
 
 export async function getTrip(id: string): Promise<Trip> {

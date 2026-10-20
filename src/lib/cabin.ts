@@ -24,5 +24,8 @@ export function demoCabin(input: {
       { id: 'rear-right', label: 'Rear right', occupant: null, role: 'empty' },
     ],
     vlm: { status: 'idle', note: '' },
+    camera: 'unavailable',
+    inference: 'idle',
+    recording: 'off',
   };
 }

@@ -2,7 +2,7 @@
 
 Velora is a family passenger-safety app for Android and iOS. Guardians can follow a trip only after a passenger agrees to share it. Location, camera, and notifications stay off until someone turns them on.
 
-The interface is a dark navy map with lime accents. Demo mode is labeled on every screen and never presents sample movement as live tracking.
+The interface is a dark graphite map with lime accents. Demo mode shows a DEMO label and never presents sample movement as live tracking. A missing alert is not treated as a verified safe state.
 
 ## Requirements
 
@@ -26,10 +26,11 @@ npm run android
 npm run ios
 ```
 
-`npm run ios` needs macOS. Typecheck with:
+`npm run ios` needs macOS. Typecheck and unit tests:
 
 ```bash
 npm run typecheck
+npm test
 ```
 
 ## Environment
@@ -51,7 +52,7 @@ On the sign-in screen, choose **Continue in demo mode**. That loads a simulated 
 - Speed, ETA, and a speeding signal update on a timer.
 - Noah Shah stays hidden until sample sharing is resumed.
 - SOS creates a sample incident and does not contact anyone.
-- A banner reads **DEMO · Simulated journey. Not live tracking.**
+- A **DEMO** label is shown. Sample positions are not described as live.
 
 If a real sign-in fails because the API is down, the home screen offers demo mode as a separate choice. The app does not silently replace a failed live request with sample coordinates.
 
@@ -83,7 +84,17 @@ Demo mode can request the same permissions so the prompts can be tested, and it 
 
 ## Screens
 
-Splash, onboarding, sign-in, and registration lead into five tabs: Home, Safety, History, Family, and Profile. Trip details, route replay, incident evidence, privacy, notifications, and emergency contacts open above the tabs.
+Splash, onboarding, sign-in, and registration lead into four tabs: Home, Activity, Trips, and Family. Profile, privacy, notifications, cabin monitoring, trip details, route replay, and incident evidence open above the tabs.
+
+Location and events carry an explicit provenance label:
+
+- **REAL** — a current report from the safety service or vehicle
+- **DEMO** — simulated data
+- **STALE** — the last fix is older than 45 seconds, or the link is reconnecting
+- **OFFLINE** — the live link is down
+- **UNKNOWN** — sharing is off, or the service has not verified the state
+
+The app does not show a trip as safe just because no alert has arrived.
 
 ## Backend contract
 
@@ -128,7 +139,18 @@ The phone sends this only after foreground or background sharing is enabled, and
 
 Alert: `{ id, tripId, incidentId?, kind, severity, title, message, createdAt, simulated }`
 
-Kinds: `fatigue | distraction | speeding | sos | geofence`. Severity: `info | watch | critical`.
+Kinds: `fatigue | distraction | speeding | sos | geofence | harsh_braking | occupancy | abusive_language | device_offline`. Severity: `info | watch | critical`.
+
+- `POST /safety/alerts/:id/acknowledge` marks an alert seen. It does not contact emergency services.
+- `POST /safety/incidents/:id/acknowledge` marks an incident seen. It does not contact emergency services.
+
+Optional alert fields the UI can show when the service sends them: `acknowledged`, `source`, `passengerName`, `vehicleLabel`.
+
+Optional evidence fields: `durationSec`, `uploadStatus` (`uploading | uploaded | failed | expired | unavailable`).
+
+`GET /trips/active` may return one trip or an array. A 404 means there is no active trip.
+
+Cabin state arrives on Socket.IO event `cabin:state`. Optional fields: `camera` (`available | unavailable | unknown`), `inference` (`running | idle | unavailable | unknown`), `recording` (`on | off | unknown`), `confidence`, `deviceStatus`. The phone does not open a live video stream and does not invent those values when they are absent.
 
 ### Family and profile
 
@@ -141,7 +163,7 @@ Kinds: `fatigue | distraction | speeding | sos | geofence`. Severity: `info | wa
 - `GET /profile/notifications` and `PATCH /profile/notifications`
 - `POST /devices/push-token` `{ token, platform: "ios" | "android" }`
 
-Privacy: `{ shareWithGuardians, foregroundSharing, backgroundSharing, cameraEvidence }`
+Privacy: `{ shareWithGuardians, foregroundSharing, backgroundSharing, cameraEvidence, speechMonitoring }`
 
 Notifications: `{ tripStart, arrival, speeding, fatigue, sos, pushEnabled }`
 
@@ -154,3 +176,11 @@ Connect to `EXPO_PUBLIC_SOCKET_URL` with `auth: { token }`.
 - `safety:event` same shape as a safety alert
 
 When the socket is down, the home screen shows **Link offline**. It does not invent a position.
+
+## What this build does not do
+
+- It does not transcribe audio on the phone. Abusive-language rows appear only when demo mode is on, or when the vehicle or safety service sends that event.
+- It does not show a live cabin video. Seat, gaze, camera, inference, and recording lines are whatever `cabin:state` actually contains.
+- It does not decide server-side data retention. Privacy explains that limitation.
+- Background location and remote push still need a development build and `EXPO_PUBLIC_EAS_PROJECT_ID` for push.
+- Acknowledge calls fail with the service error if those two routes are not deployed yet.

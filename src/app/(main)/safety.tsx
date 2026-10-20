@@ -1,86 +1,133 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { AppText } from '@/components/ui/AppText';
-import { DemoBanner } from '@/components/ui/DemoBanner';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { AlertRow } from '@/components/safety/AlertRow';
-import { RiskScore } from '@/components/safety/RiskScore';
-import { colors } from '@/constants/theme';
+import { colors, radius, space } from '@/constants/theme';
+import {
+  defaultAlertFilters,
+  describeAlert,
+  filterActivity,
+  mergeAlerts,
+  uniqueLabels,
+  type AlertFilters,
+} from '@/lib/activity-filters';
 import { getErrorMessage } from '@/lib/errors';
-import { getAlerts, getRiskSnapshot } from '@/services/api/safety';
+import { acknowledgeAlert, getAlerts } from '@/services/api/safety';
+import { getActiveTrips, getTripHistory } from '@/services/api/trips';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDemoStore } from '@/stores/demo-store';
+import { useLiveStore } from '@/stores/live-store';
 import { usePreferencesStore } from '@/stores/preferences-store';
-import type { SafetyAlert } from '@/types/models';
+
+const dates = [
+  { id: 'all', label: 'Any date' },
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: '7 days' },
+] as const;
+
+const severities = [
+  { id: 'all', label: 'Any severity' },
+  { id: 'critical', label: 'Urgent' },
+  { id: 'watch', label: 'Warning' },
+  { id: 'info', label: 'Info' },
+] as const;
 
 export default function SafetyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const isDemo = useAuthStore((state) => state.isDemo);
   const user = useAuthStore((state) => state.user);
   const demoHydrated = useDemoStore((state) => state.hydrated);
+  const liveEvents = useLiveStore((state) => state.events);
+  const speechOn = usePreferencesStore((state) => Boolean(state.privacy.speechMonitoring));
+  const [filters, setFilters] = useState<AlertFilters>(defaultAlertFilters);
   const enabled = Boolean(user) && (!isDemo || demoHydrated);
-  const scoreQuery = useQuery({
-    queryKey: ['safety', 'score', isDemo],
-    queryFn: getRiskSnapshot,
-    enabled,
-    refetchInterval: isDemo ? false : 30_000,
-  });
   const alertsQuery = useQuery({
     queryKey: ['safety', 'alerts', isDemo],
     queryFn: getAlerts,
     enabled,
     refetchInterval: isDemo ? false : 20_000,
   });
-  const speechOn = usePreferencesStore((state) => Boolean(state.privacy.speechMonitoring));
-  const alerts = (alertsQuery.data ?? []).filter((alert) => speechOn || alert.kind !== 'abusive_language');
+  const tripsQuery = useQuery({
+    queryKey: ['trips', 'lookup', isDemo],
+    queryFn: async () => {
+      const active = await getActiveTrips().catch(() => []);
+      const history = await getTripHistory().catch(() => ({ items: [], nextCursor: null }));
+      return [...active, ...history.items];
+    },
+    enabled,
+  });
+  const acknowledge = useMutation({
+    mutationFn: acknowledgeAlert,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['safety', 'alerts'] });
+    },
+    onError: (error) => Alert.alert('Could not mark this event', getErrorMessage(error)),
+  });
 
-  const metrics = scoreQuery.data;
+  const lookups = (tripsQuery.data ?? []).map((trip) => ({
+    id: trip.id,
+    passengerName: trip.passengerName,
+    vehicle: trip.driver.vehicle,
+  }));
+  const merged = mergeAlerts(alertsQuery.data ?? [], liveEvents).filter(
+    (alert) => speechOn || alert.kind !== 'abusive_language',
+  );
+  const items = filterActivity(
+    merged.map((alert) => describeAlert(alert, lookups)),
+    filters,
+  );
+  const passengers = uniqueLabels(lookups.map((trip) => trip.passengerName));
+  const vehicles = uniqueLabels(lookups.map((trip) => trip.vehicle));
 
   return (
     <View style={styles.screen}>
       <FlashList
-        data={alerts}
-        keyExtractor={(item) => item.id}
+        data={items}
+        keyExtractor={(item) => item.alert.id}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{ paddingTop: insets.top + space.md, paddingHorizontal: space.xl, paddingBottom: insets.bottom + space.xxl }}
         ItemSeparatorComponent={() => <View style={styles.gap} />}
         ListHeaderComponent={
           <View style={styles.header}>
-            <DemoBanner />
-            <AppText variant="label" tone="lime">
-              SAFETY CENTER
-            </AppText>
-            <AppText variant="display" style={styles.title}>
-              Today’s risk picture
-            </AppText>
-            {scoreQuery.isLoading ? <LoadingState label="Scoring the latest signals" /> : null}
-            {scoreQuery.isError ? (
-              <ErrorState message={getErrorMessage(scoreQuery.error)} onRetry={() => void scoreQuery.refetch()} />
-            ) : null}
-            {metrics ? (
-              <>
-                <RiskScore score={metrics.score} simulated={metrics.simulated} />
-                <View style={styles.grid}>
-                  <Metric name="Fatigue" value={metrics.fatigue} />
-                  <Metric name="Distraction" value={metrics.distraction} />
-                <Metric name="Speeding" value={metrics.speeding} />
-                <Metric name="SOS" value={metrics.sosCount} suffix="" />
-                <Metric name="Speech" value={alerts.filter((alert) => alert.kind === 'abusive_language').length} suffix="" />
-                <Metric name="Braking" value={alerts.filter((alert) => alert.kind === 'harsh_braking').length} suffix="" />
-                </View>
-                <AppText variant="caption" tone="dim">
-                  {metrics.simulated
-                    ? 'Fatigue, distraction, speeding, harsh braking, seat count, and abusive language on this screen come from the sample journey. Speech events do not keep the words.'
-                    : 'Scores refresh from the safety service. Abusive-language events arrive only after passenger consent on the vehicle.'}
-                </AppText>
-              </>
-            ) : null}
-            <AppText variant="title">Alerts</AppText>
-            {alertsQuery.isLoading ? <LoadingState label="Gathering alerts" /> : null}
+            <ScreenHeader
+              title="Activity"
+              detail="Events reported for shared trips. An empty list does not mean a trip is verified safe."
+            />
+            <FilterRow
+              label="Passenger"
+              value={filters.passenger}
+              options={['all', ...passengers]}
+              onChange={(passenger) => setFilters((current) => ({ ...current, passenger }))}
+            />
+            <FilterRow
+              label="Vehicle"
+              value={filters.vehicle}
+              options={['all', ...vehicles]}
+              onChange={(vehicle) => setFilters((current) => ({ ...current, vehicle }))}
+            />
+            <FilterRow
+              label="Severity"
+              value={filters.severity}
+              options={severities.map((item) => item.id)}
+              labels={Object.fromEntries(severities.map((item) => [item.id, item.label]))}
+              onChange={(severity) => setFilters((current) => ({ ...current, severity: severity as AlertFilters['severity'] }))}
+            />
+            <FilterRow
+              label="Date"
+              value={filters.date}
+              options={dates.map((item) => item.id)}
+              labels={Object.fromEntries(dates.map((item) => [item.id, item.label]))}
+              onChange={(date) => setFilters((current) => ({ ...current, date: date as AlertFilters['date'] }))}
+            />
+            {alertsQuery.isLoading ? <LoadingState label="Gathering events" /> : null}
             {alertsQuery.isError ? (
               <ErrorState message={getErrorMessage(alertsQuery.error)} onRetry={() => void alertsQuery.refetch()} />
             ) : null}
@@ -88,13 +135,22 @@ export default function SafetyScreen() {
         }
         ListEmptyComponent={
           alertsQuery.isLoading || alertsQuery.isError ? null : (
-            <AppText tone="muted">No open alerts. A calm list is the goal.</AppText>
+            <AppText tone="muted">No events match this view. That does not verify the trip as safe.</AppText>
           )
         }
-        renderItem={({ item }: { item: SafetyAlert }) => (
+        renderItem={({ item }) => (
           <AlertRow
-            alert={item}
-            onPress={item.incidentId ? () => router.push(`/incident/${item.incidentId}`) : undefined}
+            alert={item.alert}
+            passengerName={item.passengerName}
+            vehicleLabel={item.vehicleLabel}
+            onPress={item.alert.incidentId ? () => router.push(`/incident/${item.alert.incidentId}`) : undefined}
+            onAcknowledge={
+              item.alert.acknowledged
+                ? undefined
+                : () => {
+                    acknowledge.mutate(item.alert.id);
+                  }
+            }
           />
         )}
       />
@@ -102,33 +158,54 @@ export default function SafetyScreen() {
   );
 }
 
-function Metric({ name, value, suffix = '%' }: { name: string; value: number; suffix?: string }) {
+function FilterRow({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  labels?: Record<string, string>;
+  onChange: (value: string) => void;
+}) {
   return (
-    <View style={styles.metric}>
+    <View style={styles.filter}>
       <AppText variant="caption" tone="dim">
-        {name}
+        {label}
       </AppText>
-      <AppText variant="title">
-        {Math.round(value)}
-        {suffix}
-      </AppText>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {options.map((option) => {
+          const selected = option === value;
+          const text = option === 'all' ? 'All' : (labels?.[option] ?? option);
+          return (
+            <Pressable key={option} onPress={() => onChange(option)} style={[styles.chip, selected && styles.chipOn]}>
+              <AppText variant="caption" tone={selected ? 'lime' : 'muted'}>
+                {text}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { gap: 14, paddingBottom: 16 },
-  title: { fontSize: 34, lineHeight: 38 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metric: {
-    width: '48%',
+  header: { gap: space.lg, paddingBottom: space.lg },
+  gap: { height: space.md },
+  filter: { gap: space.sm },
+  chips: { gap: space.sm },
+  chip: {
+    minHeight: 32,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  gap: { height: 12 },
+  chipOn: { backgroundColor: colors.surface2 },
 });

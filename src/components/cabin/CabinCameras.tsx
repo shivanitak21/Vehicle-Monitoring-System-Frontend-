@@ -1,191 +1,97 @@
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { AppText } from '@/components/ui/AppText';
-import { colors, radius } from '@/constants/theme';
+import { ProvenanceChip } from '@/components/ui/ProvenanceChip';
+import { colors, radius, space } from '@/constants/theme';
+import { formatRelative } from '@/lib/format';
 import type { CabinMonitor, CabinSeat } from '@/types/models';
 
-export function CabinCameras({
-  cabin,
-  onPress,
-}: {
-  cabin: CabinMonitor;
-  onPress?: () => void;
-}) {
+function reported(value: string | undefined, fallback: string): string {
+  if (!value || value === 'unknown') return fallback;
+  return value;
+}
+
+export function CabinCameras({ cabin, onPress }: { cabin: CabinMonitor; onPress?: () => void }) {
   const body = (
     <View style={styles.wrap}>
-      <View style={styles.pair}>
-        <DriverFrame cabin={cabin} />
-        <CabinFrame cabin={cabin} />
+      <View style={styles.row}>
+        <AppText variant="label">Cabin status</AppText>
+        <ProvenanceChip provenance={cabin.simulated ? 'demo' : 'real'} />
+      </View>
+      <AppText tone="muted">
+        {cabin.simulated
+          ? 'Demo cabin state. This phone is not showing a live camera.'
+          : 'Status comes from the vehicle report. This phone does not open a live video stream.'}
+      </AppText>
+      <View style={styles.grid}>
+        <Fact label="Camera" value={reported(cabin.camera, 'Unknown')} />
+        <Fact label="Inference" value={reported(cabin.inference, 'Unknown')} />
+        <Fact label="Recording" value={reported(cabin.recording, 'Unknown')} />
+        <Fact label="Updated" value={formatRelative(cabin.updatedAt)} />
       </View>
       <AppText variant="caption" tone="dim">
-        {cabin.simulated
-          ? 'Sample cabin. The face model and seat count are simulated, not a live camera.'
-          : 'Seat positions shared for this trip.'}
+        Face model: {cabin.gazeLabel}
+        {typeof cabin.confidence === 'number' ? ` · confidence ${Math.round(cabin.confidence)}%` : ''}
+      </AppText>
+      <View style={styles.seats}>
+        {cabin.seats.map((seat) => (
+          <Seat key={seat.id} seat={seat} />
+        ))}
+      </View>
+      <AppText variant="caption" tone="dim">
+        {cabin.seatCount} occupied · {cabin.driverName} driving
+        {cabin.deviceStatus ? ` · ${cabin.deviceStatus}` : ' · vehicle status not reported'}
       </AppText>
     </View>
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button">
+    <Pressable accessibilityRole="button" onPress={onPress}>
       {body}
     </Pressable>
   );
 }
 
-function DriverFrame({ cabin }: { cabin: CabinMonitor }) {
-  const scan = useSharedValue(0);
-  useEffect(() => {
-    scan.value = withRepeat(withTiming(1, { duration: 2200 }), -1, false);
-  }, [scan]);
-  const line = useAnimatedStyle(() => ({ top: 12 + scan.value * 52 }));
-  const glance = cabin.gaze === 'glance';
-
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.frame}>
-      <View style={styles.frameHead}>
-        <View style={styles.rec} />
-        <AppText variant="caption" tone="lime">
-          FACE
-        </AppText>
-      </View>
-      <View style={styles.stage}>
-        <Animated.View style={[styles.scan, line]} />
-        <View style={styles.shoulders} />
-        <View style={styles.head}>
-          <View style={[styles.eyes, glance ? styles.eyesGlance : null]}>
-            <View style={[styles.eye, cabin.gaze === 'drowsy' ? styles.eyeDim : null]} />
-            <View style={[styles.eye, cabin.gaze === 'drowsy' ? styles.eyeDim : null]} />
-          </View>
-        </View>
-      </View>
-      <AppText variant="caption" numberOfLines={1}>
-        {cabin.driverName.split(' ')[0]}
+    <View style={styles.fact}>
+      <AppText variant="caption" tone="dim">
+        {label}
       </AppText>
-      <AppText variant="caption" tone={glance ? 'amber' : 'muted'} numberOfLines={1}>
-        {cabin.gazeLabel}
-      </AppText>
-    </View>
-  );
-}
-
-function CabinFrame({ cabin }: { cabin: CabinMonitor }) {
-  const front = cabin.seats.slice(0, 2);
-  const rear = cabin.seats.slice(2, 4);
-  return (
-    <View style={styles.frame}>
-      <View style={styles.frameHead}>
-        <View style={styles.rec} />
-        <AppText variant="caption" tone="lime">
-          CABIN
-        </AppText>
-      </View>
-      <View style={styles.stage}>
-        <View style={styles.glass} />
-        <View style={styles.seatRow}>
-          {front.map((seat) => (
-            <Seat key={seat.id} seat={seat} />
-          ))}
-        </View>
-        <View style={styles.seatRow}>
-          {rear.map((seat) => (
-            <Seat key={seat.id} seat={seat} />
-          ))}
-        </View>
-      </View>
-      <AppText variant="caption" numberOfLines={1}>
-        {cabin.seatCount} seated
-      </AppText>
-      <AppText variant="caption" tone="muted" numberOfLines={1}>
-        {cabin.passengerName.split(' ')[0]} · rear left
-      </AppText>
+      <AppText variant="label">{value}</AppText>
     </View>
   );
 }
 
 function Seat({ seat }: { seat: CabinSeat }) {
-  const filled = Boolean(seat.occupant);
-  const initial = seat.occupant ? seat.occupant.slice(0, 1) : '';
   return (
-    <View style={[styles.seat, filled ? styles.seatFilled : null, seat.role === 'passenger' ? styles.seatPassenger : null]}>
-      {filled ? (
-        <AppText variant="caption" tone={seat.role === 'passenger' ? 'lime' : 'default'}>
-          {initial}
-        </AppText>
-      ) : (
-        <View style={styles.seatEmpty} />
-      )}
+    <View style={[styles.seat, seat.occupant ? styles.seatOn : null]}>
+      <AppText variant="caption" tone={seat.occupant ? 'default' : 'dim'} numberOfLines={1}>
+        {seat.label}
+      </AppText>
+      <AppText variant="caption" tone={seat.occupant ? 'lime' : 'dim'} numberOfLines={1}>
+        {seat.occupant ?? 'Empty'}
+      </AppText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 8 },
-  pair: { flexDirection: 'row', gap: 8 },
-  frame: {
-    flex: 1,
-    minHeight: 148,
+  wrap: {
+    gap: space.sm,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    backgroundColor: colors.black,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 8,
-    gap: 4,
+    padding: space.lg,
   },
-  frameHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rec: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.coral },
-  stage: {
-    height: 78,
-    borderRadius: 12,
-    backgroundColor: '#101826',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 6,
-    gap: 4,
-  },
-  scan: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    height: 1,
-    backgroundColor: 'rgba(214, 255, 74, 0.55)',
-  },
-  shoulders: {
-    position: 'absolute',
-    bottom: 0,
-    width: 54,
-    height: 22,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: '#243044',
-  },
-  head: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#C9B29A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  eyes: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  eyesGlance: { transform: [{ translateX: 4 }] },
-  eye: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.black },
-  eyeDim: { opacity: 0.35, height: 2 },
-  glass: { position: 'absolute', top: 6, width: 46, height: 6, borderRadius: 4, backgroundColor: 'rgba(142, 180, 255, 0.35)' },
-  seatRow: { flexDirection: 'row', gap: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  fact: { width: '47%', gap: 2 },
+  seats: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   seat: {
-    width: 28,
-    height: 26,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
+    width: '47%',
+    borderRadius: radius.sm,
+    backgroundColor: colors.bg,
+    padding: space.sm,
+    gap: 2,
   },
-  seatFilled: { backgroundColor: colors.surface2, borderColor: 'rgba(255,255,255,0.16)' },
-  seatPassenger: { borderColor: colors.lime, backgroundColor: 'rgba(214, 255, 74, 0.16)' },
-  seatEmpty: { width: 8, height: 2, borderRadius: 1, backgroundColor: colors.textDim },
+  seatOn: { backgroundColor: colors.surface2 },
 });

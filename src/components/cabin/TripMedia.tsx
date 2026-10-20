@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -40,21 +39,19 @@ export function TripMedia({
 }
 
 function CaptureCard({ item }: { item: CabinCapture }) {
-  const [playing, setPlaying] = useState(false);
   return (
     <View style={styles.card}>
       {item.kind === 'photo' && item.uri ? (
         <Image source={{ uri: item.uri }} style={styles.media} contentFit="cover" />
       ) : null}
       {item.kind === 'video' && item.uri ? <ClipPlayer uri={item.uri} /> : null}
-      {item.kind === 'photo' && !item.uri ? <SampleStill /> : null}
-      {item.kind === 'video' && !item.uri ? (
-        <Pressable style={styles.sampleClip} onPress={() => setPlaying((value) => !value)}>
-          <AppText variant="label" tone="lime">
-            {playing ? 'PLAYING SAMPLE' : 'SAMPLE CLIP'}
+      {!item.uri ? (
+        <View style={styles.sampleClip}>
+          <AppText variant="label">{item.simulated ? 'DEMO' : 'Unavailable'}</AppText>
+          <AppText tone="muted">
+            {item.simulated ? 'No recording is attached to this sample.' : 'The file is missing or no longer available.'}
           </AppText>
-          <AppText tone="muted">{playing ? 'Seat count stays at 2. Rear left remains occupied.' : 'Tap to play the sample clip.'}</AppText>
-        </Pressable>
+        </View>
       ) : null}
       <AppText>{item.label}</AppText>
       <AppText variant="caption" tone="dim">
@@ -79,30 +76,6 @@ function ClipPlayer({ uri }: { uri: string }) {
       contentFit="cover"
       surfaceType="textureView"
     />
-  );
-}
-
-function SampleStill() {
-  return (
-    <View style={styles.still}>
-      <AppText variant="label" tone="lime">
-        CABIN STILL
-      </AppText>
-      <View style={styles.seatRow}>
-        <View style={styles.seat}>
-          <AppText variant="caption">L</AppText>
-        </View>
-        <View style={styles.seatEmpty} />
-      </View>
-      <View style={styles.seatRow}>
-        <View style={[styles.seat, styles.seatOn]}>
-          <AppText variant="caption" tone="lime">
-            A
-          </AppText>
-        </View>
-        <View style={styles.seatEmpty} />
-      </View>
-    </View>
   );
 }
 

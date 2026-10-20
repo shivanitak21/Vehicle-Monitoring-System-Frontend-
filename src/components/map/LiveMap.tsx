@@ -8,12 +8,15 @@ import { colors, radius } from '@/constants/theme';
 import { harborRegion } from '@/lib/geo';
 import type { LatLng } from '@/types/models';
 
+type Pin = LatLng & { color?: string };
+
 type Props = {
   route?: LatLng[];
   coordinate?: LatLng;
   heading?: number;
   showsUserLocation?: boolean;
   interactive?: boolean;
+  pins?: Pin[];
 };
 
 type Size = { width: number; height: number };
@@ -34,7 +37,7 @@ export function LiveMap(props: Props) {
   return <NativeMap {...props} />;
 }
 
-function AndroidTileMap({ route = [], coordinate, heading = 0, interactive = true }: Props) {
+function AndroidTileMap({ route = [], coordinate, heading = 0, interactive = true, pins = [] }: Props) {
   const webRef = useRef<WebViewType>(null);
   const ready = useRef(false);
   const html = useMemo(() => tileMapHtml(interactive), [interactive]);
@@ -44,8 +47,9 @@ function AndroidTileMap({ route = [], coordinate, heading = 0, interactive = tru
         route: route.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
         coordinate: coordinate ? { latitude: coordinate.latitude, longitude: coordinate.longitude } : null,
         heading,
+        pins: pins.map((pin) => ({ latitude: pin.latitude, longitude: pin.longitude, color: pin.color ?? '#FF5D73' })),
       }),
-    [route, coordinate, heading],
+    [route, coordinate, heading, pins],
   );
 
   const push = () => {
@@ -86,7 +90,7 @@ function AndroidTileMap({ route = [], coordinate, heading = 0, interactive = tru
   );
 }
 
-function NativeMap({ route = [], coordinate, heading = 0, showsUserLocation = false, interactive = true }: Props) {
+function NativeMap({ route = [], coordinate, heading = 0, showsUserLocation = false, interactive = true, pins = [] }: Props) {
   const mapRef = useRef<MapView>(null);
   const [size, setSize] = useState<Size | null>(null);
 
@@ -137,6 +141,9 @@ function NativeMap({ route = [], coordinate, heading = 0, showsUserLocation = fa
               <VehicleMarker heading={heading} />
             </Marker>
           ) : null}
+          {pins.map((pin, index) => (
+            <Marker key={`${pin.latitude}-${pin.longitude}-${index}`} coordinate={pin} pinColor={pin.color ?? colors.coral} />
+          ))}
         </MapView>
       ) : null}
     </View>
@@ -172,6 +179,7 @@ function tileMapHtml(interactive: boolean) {
   let route = [];
   let marker = null;
   let heading = 0;
+  let pins = [];
   let fitted = false;
   let userMoved = false;
   const pointers = new Map();
@@ -301,6 +309,13 @@ function tileMapHtml(interactive: boolean) {
       ctx.fill();
       ctx.restore();
     }
+    pins.forEach((pin) => {
+      const s = screenOf(pin.latitude, pin.longitude);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = pin.color || '#FF5D73';
+      ctx.fill();
+    });
   }
 
   function screenOf(lat, lng) {
@@ -331,6 +346,7 @@ function tileMapHtml(interactive: boolean) {
     route = data.route || [];
     marker = data.coordinate;
     heading = data.heading || 0;
+    pins = data.pins || [];
     if (!fitted && route.length > 1) fit(route);
     render();
   };

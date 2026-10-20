@@ -24,6 +24,8 @@ type DemoState = {
   addContact: (contact: Omit<EmergencyContact, 'id'>) => void;
   removeContact: (id: string) => void;
   pushAlert: (alert: SafetyAlert) => void;
+  acknowledgeAlert: (id: string) => void;
+  acknowledgeIncident: (id: string) => void;
   addIncident: (incident: Incident) => void;
   addEvidence: (incidentId: string, evidence: Evidence) => void;
   reset: () => void;
@@ -66,7 +68,19 @@ export const useDemoStore = create<DemoState>()(
       removeContact: (id) =>
         set((state) => ({ contacts: state.contacts.filter((contact) => contact.id !== id) })),
       pushAlert: (alert) =>
-        set((state) => ({ alerts: [alert, ...state.alerts].slice(0, 12) })),
+        set((state) => ({
+          alerts: [alert, ...state.alerts.filter((item) => item.id !== alert.id)].slice(0, 24),
+        })),
+      acknowledgeAlert: (id) =>
+        set((state) => ({
+          alerts: state.alerts.map((alert) => (alert.id === id ? { ...alert, acknowledged: true } : alert)),
+        })),
+      acknowledgeIncident: (id) =>
+        set((state) => ({
+          incidents: state.incidents.map((incident) =>
+            incident.id === id ? { ...incident, acknowledged: true } : incident,
+          ),
+        })),
       addIncident: (incident) =>
         set((state) => ({ incidents: [incident, ...state.incidents] })),
       addEvidence: (incidentId, evidence) =>

@@ -7,8 +7,8 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { Screen } from '@/components/ui/Screen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { TextField } from '@/components/ui/TextField';
@@ -50,10 +50,10 @@ export default function FamilyScreen() {
   });
 
   const remove = (member: FamilyMember) => {
-    Alert.alert(`Remove ${member.name}?`, 'They will lose access to this family circle.', [
+    Alert.alert(`Revoke access for ${member.name}?`, 'They will leave this circle and stop seeing shared trips. This does not delete their account.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Remove',
+        text: 'Revoke access',
         style: 'destructive',
         onPress: () => {
           void deleteMember(member.id).then(() => queryClient.invalidateQueries({ queryKey: ['family', 'members'] }));
@@ -68,14 +68,10 @@ export default function FamilyScreen() {
 
   return (
     <Screen>
-      <DemoBanner />
-      <AppText variant="label" tone="lime">
-        FAMILY
-      </AppText>
-      <AppText variant="display" style={styles.title}>
-        People in the circle
-      </AppText>
-      <AppText tone="muted">Passengers decide when a guardian can see a live trip. Pending consent shows no location.</AppText>
+      <ScreenHeader
+        title="Family"
+        detail="Passengers and guardians are listed separately. Pending consent shows no location, and revoking access stops sharing."
+      />
       {membersQuery.isLoading ? <LoadingState label="Loading your circle" /> : null}
       {membersQuery.isError ? (
         <ErrorState message={getErrorMessage(membersQuery.error)} onRetry={() => void membersQuery.refetch()} />
@@ -95,9 +91,10 @@ export default function FamilyScreen() {
       <Section title="Guardians" people={guardians} onRemove={remove} isDemo={isDemo} />
       <View style={styles.links}>
         <Button label="Emergency contacts" variant="secondary" onPress={() => router.push('/contacts')} />
-        <Button label="Privacy and sharing" variant="ghost" onPress={() => router.push('/privacy')} />
+        <Button label="Privacy and sharing" variant="secondary" onPress={() => router.push('/privacy')} />
+        <Button label="Profile and settings" variant="ghost" onPress={() => router.push('/profile')} />
       </View>
-      <Button label={open ? 'Close form' : 'Add someone'} variant="secondary" onPress={() => setOpen((value) => !value)} />
+      <Button label={open ? 'Close form' : 'Invite someone'} variant="secondary" onPress={() => setOpen((value) => !value)} />
       {open ? (
         <Card>
           <Controller
@@ -138,7 +135,7 @@ export default function FamilyScreen() {
           <RolePicker controlRole={control} />
           {formError ? <AppText tone="danger">{formError}</AppText> : null}
           <Button
-            label="Save member"
+            label="Send invitation"
             loading={addMutation.isPending || formState.isSubmitting}
             onPress={() => {
               setFormError(null);
@@ -202,8 +199,16 @@ function Section({
               </AppText>
             </View>
             <StatusPill
-              label={member.sharingLocation ? 'Sharing' : member.consent}
-              tone={member.sharingLocation ? 'info' : member.consent === 'pending' ? 'watch' : 'critical'}
+              label={
+                member.sharingLocation && member.consent === 'granted'
+                  ? 'Sharing'
+                  : member.consent === 'pending'
+                    ? 'Consent pending'
+                    : member.consent === 'revoked'
+                      ? 'Access revoked'
+                      : 'Not sharing'
+              }
+              tone={member.sharingLocation && member.consent === 'granted' ? 'info' : member.consent === 'pending' ? 'watch' : 'critical'}
             />
           </View>
           {isDemo && member.id === sampleId && onSample ? (
@@ -218,8 +223,8 @@ function Section({
               This switch changes the sample passenger only. It does not affect a real phone.
             </AppText>
           ) : null}
-          <Pressable onPress={() => onRemove(member)}>
-            <AppText tone="danger">Remove</AppText>
+          <Pressable accessibilityRole="button" onPress={() => onRemove(member)}>
+            <AppText tone="danger">Revoke access</AppText>
           </Pressable>
         </Card>
       ))}

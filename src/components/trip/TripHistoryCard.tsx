@@ -6,14 +6,22 @@ import { colors, radius } from '@/constants/theme';
 import { formatClock, formatDuration } from '@/lib/format';
 import type { Trip } from '@/types/models';
 
-function TripHistoryCardComponent({ trip, onPress }: { trip: Trip; onPress: () => void }) {
+function TripHistoryCardComponent({
+  trip,
+  onPress,
+  detail,
+}: {
+  trip: Trip;
+  onPress: () => void;
+  detail?: string;
+}) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.row}>
         <AppText variant="label" tone="muted">
           {formatClock(trip.startedAt).toUpperCase()}
         </AppText>
-        <StatusPill label={trip.status === 'arrived' ? 'Arrived' : trip.status} tone={trip.status === 'arrived' ? 'info' : 'watch'} />
+        <StatusPill label={trip.status === 'arrived' ? 'Arrived' : trip.status === 'en_route' ? 'En route' : trip.status} tone={trip.status === 'arrived' ? 'info' : 'lime'} />
       </View>
       <AppText variant="title" style={styles.title}>
         {trip.passengerName}
@@ -23,7 +31,7 @@ function TripHistoryCardComponent({ trip, onPress }: { trip: Trip; onPress: () =
       </AppText>
       <AppText variant="caption" tone="dim">
         {formatDuration(trip.startedAt, trip.endedAt)}
-        {trip.simulated ? ' · Sample trip' : ''}
+        {detail ? ` · ${detail}` : ''}
       </AppText>
     </Pressable>
   );

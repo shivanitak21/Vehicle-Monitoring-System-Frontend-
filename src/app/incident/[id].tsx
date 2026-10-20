@@ -4,17 +4,18 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { Screen } from '@/components/ui/Screen';
-import { ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { colors, radius } from '@/constants/theme';
-import { getErrorMessage } from '@/lib/errors';
+import { ApiError, getErrorMessage } from '@/lib/errors';
 import { formatClock } from '@/lib/format';
-import { getIncident, uploadEvidence } from '@/services/api/safety';
+import { acknowledgeIncident, getIncident, uploadEvidence } from '@/services/api/safety';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDemoStore } from '@/stores/demo-store';
 import { usePreferencesStore } from '@/stores/preferences-store';
@@ -32,6 +33,15 @@ export default function IncidentScreen() {
     queryKey: ['incidents', id, isDemo],
     queryFn: () => getIncident(id ?? ''),
     enabled: Boolean(id) && (!isDemo || demoHydrated),
+  });
+  const acknowledge = useMutation({
+    mutationFn: () => acknowledgeIncident(id ?? ''),
+    onSuccess: async () => {
+      setMessage('Marked as seen on this account. Emergency services were not contacted.');
+      await queryClient.invalidateQueries({ queryKey: ['incidents', id, isDemo] });
+      await queryClient.invalidateQueries({ queryKey: ['safety'] });
+    },
+    onError: (error) => setMessage(getErrorMessage(error)),
   });
   const upload = useMutation({
     mutationFn: (file: { uri: string; name: string; type: string; kind: 'photo' | 'video' }) =>
@@ -76,9 +86,12 @@ export default function IncidentScreen() {
 
   return (
     <Screen withHeader>
-      <DemoBanner />
+      <ScreenHeader title="Incident" detail="Photos and video appear only when the service actually has them." />
       {incidentQuery.isLoading ? <LoadingState label="Opening the incident" /> : null}
-      {incidentQuery.isError ? (
+      {incidentQuery.isError && incidentQuery.error instanceof ApiError && incidentQuery.error.status === 403 ? (
+        <EmptyState title="Access denied" message="You are not allowed to open this incident." />
+      ) : null}
+      {incidentQuery.isError && !(incidentQuery.error instanceof ApiError && incidentQuery.error.status === 403) ? (
         <ErrorState message={getErrorMessage(incidentQuery.error)} onRetry={() => void incidentQuery.refetch()} />
       ) : null}
       {incident ? (
@@ -87,36 +100,57 @@ export default function IncidentScreen() {
             <StatusPill label={incident.severity} tone={incident.severity} />
             <StatusPill label={incident.status} tone={incident.status === 'resolved' ? 'info' : 'watch'} />
           </View>
-          <AppText variant="display" style={styles.title}>
-            {incident.title}
-          </AppText>
+          <AppText variant="title">{incident.title}</AppText>
           <AppText tone="muted">{incident.summary}</AppText>
           <AppText variant="caption" tone="dim">
             {formatClock(incident.occurredAt)} · {incident.locationLabel}
-            {incident.simulated ? ' · Simulated record' : ''}
+            {incident.passengerName ? ` · ${incident.passengerName}` : ''}
+            {incident.vehicleLabel ? ` · ${incident.vehicleLabel}` : ''}
+            {incident.source ? ` · ${incident.source}` : incident.simulated ? ' · Demo simulator' : ' · Safety service'}
           </AppText>
+          <AppText variant="caption" tone="dim">
+            {incident.acknowledged ? 'Seen by this account.' : 'Not acknowledged.'} Emergency services are not contacted by this action.
+          </AppText>
+          {!incident.acknowledged ? (
+            <Button
+              label="Mark as seen"
+              variant="secondary"
+              loading={acknowledge.isPending}
+              onPress={() => acknowledge.mutate()}
+            />
+          ) : null}
           <AppText variant="title">Evidence</AppText>
           {incident.evidence.length === 0 ? (
-            <AppText tone="muted">No photo or video is attached. Capture only if you mean to add it to this report.</AppText>
+            <AppText tone="muted">No photo or video is attached. Nothing here is a sample recording.</AppText>
           ) : null}
-          {incident.evidence.map((item) => (
+          {incident.evidence.map((item) => {
+            const playable = Boolean(item.uri) && item.uploadStatus !== 'expired' && item.uploadStatus !== 'unavailable';
+            return (
             <Card key={item.id}>
-              {item.uri ? (
-                <Image source={{ uri: item.uri }} style={styles.media} contentFit="cover" />
-              ) : (
+              {playable && item.kind === 'photo' ? (
+                <Image source={{ uri: item.uri }} style={styles.media} contentFit="cover" accessibilityLabel={item.label} />
+              ) : null}
+              {playable && item.kind === 'video' ? <EvidenceClip uri={item.uri} /> : null}
+              {!playable ? (
                 <View style={styles.placeholder}>
-                  <AppText variant="label" tone="lime">
-                    {item.kind === 'video' ? 'SAMPLE CLIP' : 'SAMPLE STILL'}
+                  <AppText variant="label">
+                    {item.simulated ? 'DEMO' : item.uploadStatus === 'expired' ? 'Expired' : 'Unavailable'}
+                  </AppText>
+                  <AppText tone="muted">
+                    {item.simulated ? 'This sample has no media file.' : 'The file cannot be played.'}
                   </AppText>
                 </View>
-              )}
+              ) : null}
               <AppText tone="muted">{item.label}</AppText>
               <AppText variant="caption" tone="dim">
                 {formatClock(item.capturedAt)}
-                {item.simulated ? ' · Not a real recording' : ' · Added by you'}
+                {item.durationSec ? ` · ${item.durationSec}s` : ''}
+                {item.uploadStatus ? ` · ${item.uploadStatus}` : ''}
+                {item.simulated ? ' · Not a real recording' : item.uri ? ' · From the service' : ''}
               </AppText>
             </Card>
-          ))}
+            );
+          })}
           {message ? <AppText tone="muted">{message}</AppText> : null}
           <Button label="Capture evidence" loading={upload.isPending} onPress={() => void capture('camera')} />
           <Button label="Choose from library" variant="secondary" onPress={() => void capture('library')} />
@@ -127,6 +161,13 @@ export default function IncidentScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function EvidenceClip({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (instance) => {
+    instance.loop = false;
+  });
+  return <VideoView player={player} style={styles.media} nativeControls contentFit="cover" />;
 }
 
 const styles = StyleSheet.create({

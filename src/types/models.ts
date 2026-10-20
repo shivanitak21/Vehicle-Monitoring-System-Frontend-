@@ -72,7 +72,8 @@ export type SafetyKind =
   | 'geofence'
   | 'harsh_braking'
   | 'occupancy'
-  | 'abusive_language';
+  | 'abusive_language'
+  | 'device_offline';
 
 export type Severity = 'info' | 'watch' | 'critical';
 
@@ -86,6 +87,10 @@ export type SafetyAlert = {
   message: string;
   createdAt: string;
   simulated: boolean;
+  acknowledged?: boolean;
+  source?: string;
+  passengerName?: string;
+  vehicleLabel?: string;
 };
 
 export type Evidence = {
@@ -95,6 +100,8 @@ export type Evidence = {
   label: string;
   simulated: boolean;
   capturedAt: string;
+  durationSec?: number;
+  uploadStatus?: 'uploading' | 'uploaded' | 'failed' | 'expired' | 'unavailable';
 };
 
 export type Incident = {
@@ -110,6 +117,10 @@ export type Incident = {
   evidence: Evidence[];
   simulated: boolean;
   status: 'open' | 'resolved';
+  acknowledged?: boolean;
+  source?: string;
+  passengerName?: string;
+  vehicleLabel?: string;
 };
 
 export type RiskSnapshot = {
@@ -181,6 +192,11 @@ export type CabinMonitor = {
     status: 'idle' | 'checking' | 'confirmed';
     note: string;
   };
+  camera?: 'available' | 'unavailable' | 'unknown';
+  inference?: 'running' | 'idle' | 'unavailable' | 'unknown';
+  recording?: 'on' | 'off' | 'unknown';
+  confidence?: number;
+  deviceStatus?: string;
 };
 
 export type GuardianNotice = {

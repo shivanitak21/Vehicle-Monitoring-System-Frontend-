@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { Screen } from '@/components/ui/Screen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { colors } from '@/constants/theme';
 import { getErrorMessage } from '@/lib/errors';
 import {
@@ -37,10 +37,10 @@ export default function PrivacyScreen() {
 
   return (
     <Screen withHeader>
-      <DemoBanner />
-      <AppText tone="muted">
-        These switches control this phone. They do not turn on a family member’s location. In demo mode, nothing is uploaded.
-      </AppText>
+      <ScreenHeader
+        title="Privacy"
+        detail="These switches control this phone. They do not turn on a family member’s location. In demo mode, nothing is uploaded."
+      />
       {message ? <AppText variant="caption" tone="dim">{message}</AppText> : null}
       <Card>
         <Row
@@ -133,6 +133,14 @@ export default function PrivacyScreen() {
             });
           }}
         />
+      </Card>
+      <Card>
+        <AppText variant="title" style={styles.title}>
+          Data retention
+        </AppText>
+        <AppText tone="muted">
+          Trip history and evidence stay with the safety service. This app has no control to delete those server records. Signing out removes the session on this phone. Demo data stays on this phone until you reset it from Profile.
+        </AppText>
       </Card>
     </Screen>
   );

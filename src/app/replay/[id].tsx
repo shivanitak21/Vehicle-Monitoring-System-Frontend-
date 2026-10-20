@@ -3,14 +3,16 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
-import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LiveMap } from '@/components/map/LiveMap';
 import { Screen } from '@/components/ui/Screen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { RouteProgress } from '@/components/trip/RouteProgress';
 import { colors, radius } from '@/constants/theme';
 import { getErrorMessage } from '@/lib/errors';
 import { pointAlong } from '@/lib/geo';
+import { routeRecordLabel } from '@/lib/provenance';
+import { getIncidents } from '@/services/api/safety';
 import { getTrip } from '@/services/api/trips';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDemoStore } from '@/stores/demo-store';
@@ -23,6 +25,11 @@ export default function ReplayScreen() {
   const tripQuery = useQuery({
     queryKey: ['trips', id, isDemo],
     queryFn: () => getTrip(id ?? ''),
+    enabled: Boolean(id) && (!isDemo || demoHydrated),
+  });
+  const incidentsQuery = useQuery({
+    queryKey: ['incidents', isDemo],
+    queryFn: getIncidents,
     enabled: Boolean(id) && (!isDemo || demoHydrated),
   });
   const [playing, setPlaying] = useState(true);
@@ -43,7 +50,7 @@ export default function ReplayScreen() {
 
   return (
     <Screen withHeader>
-      <DemoBanner />
+      <ScreenHeader title="Route replay" />
       {tripQuery.isLoading ? <LoadingState label="Preparing the replay" /> : null}
       {tripQuery.isError ? <ErrorState message={getErrorMessage(tripQuery.error)} onRetry={() => void tripQuery.refetch()} /> : null}
       {trip && frame ? (
@@ -52,11 +59,27 @@ export default function ReplayScreen() {
           <AppText tone="muted">
             {trip.origin} → {trip.destination}
           </AppText>
-          {trip.simulated ? <AppText variant="caption" tone="lime">Sample replay. Not a live vehicle.</AppText> : null}
+          <AppText variant="caption" tone="dim">
+            {routeRecordLabel({ simulated: trip.simulated, pointCount: trip.route.length })}
+          </AppText>
+          {trip.route.length < 2 ? (
+            <AppText tone="muted">This trip has no recorded GPS path to replay.</AppText>
+          ) : (
           <View style={styles.map}>
-            <LiveMap route={trip.consent === 'granted' ? trip.route : []} coordinate={trip.consent === 'granted' ? frame.point : undefined} heading={frame.heading} interactive={false} />
+            <LiveMap
+              route={trip.consent === 'granted' ? trip.route : []}
+              coordinate={trip.consent === 'granted' ? frame.point : undefined}
+              heading={frame.heading}
+              interactive={false}
+              pins={(incidentsQuery.data ?? [])
+                .filter((incident) => incident.tripId === trip.id && trip.consent === 'granted')
+                .map((incident) => ({ ...incident.coordinate, color: colors.coral }))}
+            />
           </View>
+          )}
           {trip.consent !== 'granted' ? <AppText tone="muted">Replay is hidden because this trip was not shared.</AppText> : null}
+          {trip.route.length < 2 ? null : (
+          <>
           <RouteProgress progress={progress} />
           <View style={styles.controls}>
             <Pressable style={styles.button} onPress={() => setPlaying((value) => !value)}>
@@ -87,6 +110,8 @@ export default function ReplayScreen() {
           >
             <View style={[styles.seekFill, { width: `${Math.round(progress * 100)}%` }]} />
           </Pressable>
+          </>
+          )}
         </>
       ) : null}
     </Screen>

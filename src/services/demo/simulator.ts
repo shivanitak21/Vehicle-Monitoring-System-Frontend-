@@ -12,7 +12,7 @@ let progress = 0.22;
 let lastAlertAt = 0;
 let guardianSentForBurst = false;
 let lastProgress = 0.22;
-const fired = { glance: false, brake: false, speech: false, seats: false, fatigue: false };
+const fired = { glance: false, brake: false, speech: false, seats: false };
 
 function pushActivity(kind: SafetyKind, severity: Severity, title: string, message: string, at: string) {
   const alert: SafetyAlert = {
@@ -24,32 +24,13 @@ function pushActivity(kind: SafetyKind, severity: Severity, title: string, messa
     message,
     createdAt: at,
     simulated: true,
+    source: 'Demo simulator',
+    passengerName: 'Aria Shah',
+    vehicleLabel: 'Velora Shuttle 04',
   };
   useDemoStore.getState().pushAlert(alert);
   useLiveStore.getState().pushEvent(alert);
   void queryClient.invalidateQueries({ queryKey: ['safety'] });
-}
-
-function seedCabinMedia() {
-  if (useLiveStore.getState().captures.length > 0) return;
-  const capturedAt = new Date().toISOString();
-  useLiveStore.getState().addCapture({
-    id: 'still-cabin',
-    kind: 'photo',
-    uri: '',
-    label: 'Cabin still · Aria in the rear left seat',
-    simulated: true,
-    capturedAt,
-  });
-  useLiveStore.getState().addCapture({
-    id: 'clip-cabin',
-    kind: 'video',
-    uri: '',
-    durationSec: 8,
-    label: 'Cabin clip · driver and one passenger',
-    simulated: true,
-    capturedAt,
-  });
 }
 
 function tick() {
@@ -90,7 +71,7 @@ function tick() {
     if (!guardianSentForBurst) {
       guardianSentForBurst = true;
       useLiveStore.getState().publishGuardian({
-        reason: 'High risk score',
+        reason: 'Simulated speeding signal',
         at: updatedAt,
         simulated: true,
       });
@@ -111,6 +92,9 @@ function tick() {
       message: 'The sample shuttle briefly exceeded the demo limit. This is not a live event.',
       createdAt: updatedAt,
       simulated: true,
+      source: 'Demo simulator',
+      passengerName: 'Aria Shah',
+      vehicleLabel: 'Velora Shuttle 04',
     });
     void queryClient.invalidateQueries({ queryKey: ['safety'] });
   }
@@ -120,7 +104,6 @@ function tick() {
     fired.brake = false;
     fired.speech = false;
     fired.seats = false;
-    fired.fatigue = false;
   }
   lastProgress = progress;
 
@@ -131,16 +114,6 @@ function tick() {
       'watch',
       'Glance away from the road',
       'The face camera marked a short glance. This is a simulated driver-model reading.',
-      updatedAt,
-    );
-  }
-  if (progress > 0.4 && !fired.fatigue) {
-    fired.fatigue = true;
-    pushActivity(
-      'fatigue',
-      'info',
-      'Driver still alert',
-      'The face camera fatigue score stayed low. Simulated reading, not a medical result.',
       updatedAt,
     );
   }
@@ -160,7 +133,7 @@ function tick() {
       'abusive_language',
       'watch',
       'Abusive language flagged',
-      'The cabin speech model flagged a phrase. Velora does not store the words. This detection is simulated.',
+      'Demo script only. No audio was transcribed on this phone.',
       updatedAt,
     );
   }
@@ -178,10 +151,9 @@ function tick() {
 
 export function startDemoSimulator(): void {
   if (timer) return;
-  seedCabinMedia();
   seedDetections();
   tick();
-  timer = setInterval(tick, 1000);
+  timer = setInterval(tick, 1_000);
 }
 
 function seedDetections() {
@@ -201,7 +173,7 @@ function seedDetections() {
       'abusive_language',
       'watch',
       'Abusive language flagged',
-      'The cabin speech model flagged a phrase. Velora does not store the words. This detection is simulated.',
+      'Demo script only. No audio was transcribed on this phone.',
       at,
     );
   }
